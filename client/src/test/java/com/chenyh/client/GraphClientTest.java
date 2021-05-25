@@ -5,8 +5,8 @@ import com.jayway.jsonpath.TypeRef;
 import com.netflix.graphql.dgs.client.DefaultGraphQLClient;
 import com.netflix.graphql.dgs.client.GraphQLResponse;
 import com.netflix.graphql.dgs.client.HttpResponse;
+import com.netflix.graphql.dgs.client.RequestExecutor;
 import com.netflix.graphql.dgs.client.codegen.BaseProjectionNode;
-import com.netflix.graphql.dgs.client.codegen.EntitiesGraphQLQuery;
 import com.netflix.graphql.dgs.client.codegen.GraphQLQuery;
 import com.netflix.graphql.dgs.client.codegen.GraphQLQueryRequest;
 import org.jetbrains.annotations.NotNull;
@@ -17,7 +17,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,26 +39,7 @@ public class GraphClientTest {
 
         Map<String, String> map = new HashMap<>();
 
-        GraphQLResponse response = graphQLClient.executeQuery(QUERY, new HashMap<>(), "", (url, headers, body) -> {
-            /**
-             * The requestHeaders providers headers typically required to call a GraphQL endpoint, including the Accept and Content-Type headers.
-             * To use RestTemplate, the requestHeaders need to be transformed into Spring's HttpHeaders.
-             */
-            HttpHeaders requestHeaders = new HttpHeaders();
-            headers.forEach(requestHeaders::put);
-
-            /**
-             * Use RestTemplate to call the GraphQL service.
-             * The response type should simply be String, because the parsing will be done by the GraphQLClient.
-             */
-            ResponseEntity<String> exchange = dgsRestTemplate.exchange(url, HttpMethod.POST, new HttpEntity(body, requestHeaders), String.class);
-
-            /**
-             * Return a HttpResponse, which contains the HTTP status code and response body (as a String).
-             * The way to get these depend on the HTTP client.
-             */
-            return new HttpResponse(exchange.getStatusCodeValue(), exchange.getBody());
-        });
+        GraphQLResponse response = graphQLClient.executeQuery(QUERY, new HashMap<>(), "", executor);
 
         List<Show> shows = response.extractValueAsObject("shows", new TypeRef<List<Show>>() {
         });
@@ -69,6 +49,7 @@ public class GraphClientTest {
 
         return null;
     }
+
     @Test
     public void showsWithQueryApi() {
         getData();
@@ -76,45 +57,76 @@ public class GraphClientTest {
 
 
     @Test
-    public void showsWithQueryApi2(){
+    public void showsWithQueryApi2() {
+        ShowGraphQLQuery query = new ShowGraphQLQuery();
 
-        GraphQLQuery query = new GraphQLQuery() {
-            @NotNull
-            @Override
-            public String getOperationName() {
-                return "shows";
-            }
-        };
+        GraphQLQueryRequest request = new GraphQLQueryRequest(query,new ShowProjection().releaseYear().title());
 
+        DefaultGraphQLClient graphQLClient = new DefaultGraphQLClient(URL);
 
+        Map<String, Object> vars = new HashMap<>();
 
-        GraphQLQueryRequest request = new GraphQLQueryRequest(query , null);
+        vars.put("var1", "v1");
+
+        GraphQLResponse response = graphQLClient.executeQuery(request.serialize(), vars, "shows", executor);
+
+        System.out.println(response.getJson());
 
     }
+
+    @Test
+    public void showsWithQueryApi3() {
+
+        String queryStr = "query  shows (titleFilter : $title) { releaseYear title } ";
+
+        DefaultGraphQLClient graphQLClient = new DefaultGraphQLClient(URL);
+
+        Map<String, Object> vars = new HashMap<>();
+
+        vars.put("title", "the");
+
+        GraphQLResponse response = graphQLClient.executeQuery(queryStr,vars, "MyQuery", executor);
+
+        System.out.println(response.getJson());
+
+    }
+
+    RequestExecutor executor = (url, headers, body) -> {
+        HttpHeaders requestHeaders = new HttpHeaders();
+        headers.forEach(requestHeaders::put);
+        ResponseEntity<String> exchange = dgsRestTemplate.exchange(url, HttpMethod.POST, new HttpEntity(body, requestHeaders), String.class);
+        return new HttpResponse(exchange.getStatusCodeValue(), exchange.getBody());
+    };
 
 
 }
 
-class ShowNode extends BaseProjectionNode {
+class ShowProjection extends BaseProjectionNode {
 
-    private String title;
-    private Integer releaseYear;
+    private final Map<String, Object> fields = super.getFields();
 
-    public String getTitle() {
-        return title;
-    }
-
-    public ShowNode setTitle(String title) {
-        this.title = title;
+    public ShowProjection releaseYear () {
+        fields.put("releaseYear", null);
         return this;
     }
 
-    public Integer getReleaseYear() {
-        return releaseYear;
+    public ShowProjection title() {
+        fields.put("title", null);
+        return this;
     }
 
-    public ShowNode setReleaseYear(Integer releaseYear) {
-        this.releaseYear = releaseYear;
-        return this;
+}
+
+class ShowGraphQLQuery extends GraphQLQuery {
+
+    public ShowGraphQLQuery() {
+        Map<String, Object> input = super.getInput();
+    }
+
+    @NotNull
+    @Override
+    public String getOperationName() {
+        return "shows";
     }
 }
+

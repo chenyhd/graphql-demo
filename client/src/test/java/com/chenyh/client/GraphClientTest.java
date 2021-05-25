@@ -77,15 +77,15 @@ public class GraphClientTest {
     @Test
     public void showsWithQueryApi3() {
 
-        String queryStr = "query  shows (titleFilter : $title) { releaseYear title } ";
+        String queryStr = "query Q ($titleFilter : String) {shows ( titleFilter : $titleFilter) { releaseYear title } }";
 
         DefaultGraphQLClient graphQLClient = new DefaultGraphQLClient(URL);
 
         Map<String, Object> vars = new HashMap<>();
 
-        vars.put("title", "the");
+//        vars.put("titleFilter", "the");
 
-        GraphQLResponse response = graphQLClient.executeQuery(queryStr,vars, "MyQuery", executor);
+        GraphQLResponse response = graphQLClient.executeQuery(queryStr,vars, "", executor);
 
         System.out.println(response.getJson());
 
